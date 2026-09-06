@@ -1,0 +1,31 @@
+{
+  "name": "here-evidence-memory",
+  "version": "0.1.0",
+  "description": "Evidence-first, source-verifiable lexical memory retrieval for long-running conversations.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "sideEffects": false,
+  "engines": { "node": ">=20" },
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/joyozhang333-lgtm/here-evidence-memory.git" },
+  "bugs": { "url": "https://github.com/joyozhang333-lgtm/here-evidence-memory/issues" },
+  "homepage": "https://github.com/joyozhang333-lgtm/here-evidence-memory#readme",
+  "keywords": ["memory", "evidence", "retrieval", "conversation", "typescript", "chinese"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "test:package": "node scripts/test-package.mjs",
+    "prepack": "npm run build"
+  },
+  "devDependencies": { "typescript": "5.9.3" }
+}
