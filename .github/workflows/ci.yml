@@ -19,5 +19,8 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run check
       - run: npm test
+      - run: npx playwright install --with-deps --only-shell chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/node_modules/.cache/ms-playwright
       - run: npm run test:package
       - run: npm audit --omit=dev --registry=https://registry.npmjs.org

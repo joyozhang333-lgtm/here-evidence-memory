@@ -1,31 +1,61 @@
 {
   "name": "here-evidence-memory",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Evidence-first, source-verifiable lexical memory retrieval for long-running conversations.",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      },
       "default": "./dist/index.js"
-    }
+    },
+    "./browser": "./dist/here-evidence-memory.iife.js"
   },
-  "files": ["dist", "README.md", "LICENSE"],
-  "sideEffects": false,
-  "engines": { "node": ">=20" },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": ["./dist/here-evidence-memory.iife.js"],
+  "engines": {
+    "node": ">=20"
+  },
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/joyozhang333-lgtm/here-evidence-memory.git" },
-  "bugs": { "url": "https://github.com/joyozhang333-lgtm/here-evidence-memory/issues" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joyozhang333-lgtm/here-evidence-memory.git"
+  },
+  "bugs": {
+    "url": "https://github.com/joyozhang333-lgtm/here-evidence-memory/issues"
+  },
   "homepage": "https://github.com/joyozhang333-lgtm/here-evidence-memory#readme",
-  "keywords": ["memory", "evidence", "retrieval", "conversation", "typescript", "chinese"],
+  "keywords": [
+    "memory",
+    "evidence",
+    "retrieval",
+    "conversation",
+    "typescript",
+    "chinese"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/build.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test test/*.test.mjs",
     "test:package": "node scripts/test-package.mjs",
     "prepack": "npm run build"
   },
-  "devDependencies": { "typescript": "5.9.3" }
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "1.63.0",
+    "typescript": "5.9.3"
+  }
 }
