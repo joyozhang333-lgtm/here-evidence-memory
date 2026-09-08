@@ -18,7 +18,7 @@ const source = (id, text, age = 1, extra = {}) => ({
 });
 
 test("exports a version and source-verifiable evidence", () => {
-  assert.equal(EVIDENCE_MEMORY_VERSION, "0.1.0");
+  assert.equal(EVIDENCE_MEMORY_VERSION, "0.2.0");
   const original = source("one", "我希望练习工作边界，不再一味答应。", 30);
   const result = retrieveEvidence([original], options());
   assert.equal(result.evidence.length, 1);
