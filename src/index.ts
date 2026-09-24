@@ -3,7 +3,7 @@
  * Pure retrieval only: the host owns authentication, encryption, persistence,
  * consent and deletion. Matching supplied text does not authenticate history.
  */
-export const EVIDENCE_MEMORY_VERSION = "0.2.0";
+export const EVIDENCE_MEMORY_VERSION = "0.3.0";
 
 export type ObservedAtPrecision = "message" | "session-date";
 
@@ -60,6 +60,30 @@ export interface RetrievalOptions extends MemoryBoundaryOptions {
   maxItems?: number;
   eligibleCount?: number;
   scanTruncated?: boolean;
+}
+
+/**
+ * A server/local-only input for checking a proposed strong historical recall.
+ * The caller, not this pure library, must load the complete authorized history.
+ */
+export interface ClaimVerificationOptions extends MemoryBoundaryOptions {
+  /** Include the active turn here if it has already been persisted. */
+  currentTurnSourceIds: readonly string[];
+  /** Explicit host attestation; a paginated or truncated result must pass false. */
+  fullHistoryLoaded: boolean;
+  scanTruncated?: boolean;
+  /** Upper bound for full raw user text; default and hard cap are 2,000,000 UTF-16 units. */
+  maxCharacters?: number;
+}
+
+export interface ClaimVerificationCorpus {
+  /** Full eligible user utterances, newest first. Never send this corpus to the model. */
+  texts: string[];
+  complete: boolean;
+  scannedCount: number;
+  consideredCount: number;
+  reason: "complete" | "history-incomplete" | "invalid-boundary" |
+    "identity-conflict" | "character-limit";
 }
 
 const DAY_MS = 86_400_000;
@@ -224,6 +248,51 @@ export function retrieveEvidence(sources: readonly MemorySource[], options: Retr
     oldestScannedAt: times[0] || null, newestScannedAt: times.at(-1) || null,
   };
   return { evidence: selected, coverage };
+}
+
+/**
+ * Prepare an ephemeral, full-text corpus for a host's deterministic claim guard.
+ * This does not decide whether a statement is true, corrected, or psychologically
+ * sound. If coverage is uncertain, it returns no text and complete=false so a
+ * caller cannot mistake a partial top-K retrieval for complete historical proof.
+ */
+export function collectClaimVerificationCorpus(
+  sources: readonly MemorySource[], options: ClaimVerificationOptions,
+): ClaimVerificationCorpus {
+  const scannedCount = Array.isArray(sources) ? sources.length : 0;
+  const incomplete = (reason: Exclude<ClaimVerificationCorpus["reason"], "complete">): ClaimVerificationCorpus =>
+    ({ texts: [], complete: false, scannedCount, consideredCount: 0, reason });
+  if (!options || typeof options.ownerId !== "string" || !options.ownerId.trim() ||
+    (options.memoryEnabled !== undefined && options.memoryEnabled !== true) ||
+    (options.now !== undefined && boundaryValue(options.now) === null) ||
+    (options.excludedBefore !== undefined && options.excludedBefore !== null &&
+      boundaryValue(options.excludedBefore) === null) ||
+    !Array.isArray(options.currentTurnSourceIds) ||
+    (options.sessionExcludedBefore && Object.values(options.sessionExcludedBefore).some(value =>
+      value !== undefined && value !== null && boundaryValue(value) === null))) {
+    return incomplete("invalid-boundary");
+  }
+  if (!Array.isArray(sources) || options.fullHistoryLoaded !== true || options.scanTruncated === true) {
+    return incomplete("history-incomplete");
+  }
+  // Count all owner-matching IDs before eligibility filtering: a revoked
+  // duplicate cannot make a stale active copy look authoritative.
+  const idCounts = new Map<string, number>();
+  for (const source of sources) {
+    if (source && source.ownerId === options.ownerId && typeof source.id === "string") {
+      idCounts.set(source.id, (idCounts.get(source.id) ?? 0) + 1);
+    }
+  }
+  if ([...idCounts.values()].some(count => count > 1)) return incomplete("identity-conflict");
+  const currentIds = new Set(options.currentTurnSourceIds);
+  const eligible = sources.filter(source => isSourceEligible(source, options) && !currentIds.has(source.id));
+  const maximum = options.maxCharacters === undefined ? 2_000_000 :
+    Number.isFinite(options.maxCharacters) ? Math.min(2_000_000, Math.max(0, Math.floor(options.maxCharacters))) : 0;
+  const characters = eligible.reduce((sum, source) => sum + source.text.length, 0);
+  if (characters > maximum) return incomplete("character-limit");
+  eligible.sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt) || b.id.localeCompare(a.id));
+  return { texts: eligible.map(source => source.text), complete: true,
+    scannedCount, consideredCount: eligible.length, reason: "complete" };
 }
 
 export function formatEvidenceContext(result: ReturnType<typeof retrieveEvidence>) {

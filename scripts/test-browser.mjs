@@ -14,7 +14,13 @@ export function exercise(HEM) {
   }));
   const { sources, sourceRefs } = HEM.adaptSessions(sessions, options);
   const result = HEM.retrieveEvidence(sources, options);
-  if (HEM.EVIDENCE_MEMORY_VERSION !== "0.2.0" || result.evidence.length !== 2) throw new Error("Retrieval failed");
+  const corpus = HEM.collectClaimVerificationCorpus(sources, {
+    ownerId: options.ownerId, now: options.now, currentTurnSourceIds: [sources[0].id], fullHistoryLoaded: true,
+  });
+  if (HEM.EVIDENCE_MEMORY_VERSION !== "0.3.0" || result.evidence.length !== 2) throw new Error("Retrieval failed");
+  if (!corpus.complete || corpus.texts.length !== 1 || corpus.texts[0] !== sources[1].text) {
+    throw new Error("Claim verification corpus failed");
+  }
   for (const source of sources) {
     const evidence = result.evidence.find(e => e.sourceId === source.id);
     if (!HEM.isSourceEligible(source, options) || !HEM.verifyEvidence(evidence, source, options) ||
@@ -26,7 +32,7 @@ export function exercise(HEM) {
       HEM.verifyEvidence(evidence, source, { ...options, excludedBefore: options.now })) throw new Error("Boundary failed");
   }
   if (!HEM.formatEvidenceContext(result).includes(JSON.stringify(result))) throw new Error("Context serialization failed");
-  return { exports: Object.keys(HEM).sort(), result, sourceRefs };
+  return { exports: Object.keys(HEM).sort(), result, sourceRefs, corpus };
 }
 
 export async function testBrowser(dist) {

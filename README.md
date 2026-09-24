@@ -26,10 +26,10 @@ npm test
 npm pack
 ```
 
-在其他产品中安装生成的 `here-evidence-memory-0.2.0.tgz`：
+在其他产品中安装生成的 `here-evidence-memory-0.3.0.tgz`：
 
 ```sh
-npm install /path/to/here-evidence-memory-0.2.0.tgz
+npm install /path/to/here-evidence-memory-0.3.0.tgz
 ```
 
 构建输出如下，三种 JavaScript 产物均独立、无运行依赖：
@@ -192,6 +192,27 @@ const adapted = HEM.adaptSessions(legacySessions, { ...boundary, mapping });
 
 更正历史会保留各次用户原话及日期，不自动判真、不合并为诊断。明确撤回旧说法时可同时排除旧 source；仅词面检索不能保证在小预算内一定召回更正，当前更正仍应进入当前对话上下文。
 
+### 强记忆主张的完整历史校验
+
+检索结果故意有限长，可能选中早期说法却漏掉后来更正。宿主如果允许 Coach 用“我记得你以前说过……”等肯定句，应另取**完整、已授权的原始用户消息**做本地或服务端确定性校验；不要把校验语料送进模型。0.3.0 提供纯函数 `collectClaimVerificationCorpus` 来整理这份短暂的语料：
+
+```ts
+import { collectClaimVerificationCorpus } from "here-evidence-memory";
+
+const corpus = collectClaimVerificationCorpus(allAuthorizedSources, {
+  ownerId: "synthetic-user", now: "2026-02-01T08:00:00.000Z",
+  currentTurnSourceIds: ["message-just-persisted"],
+  fullHistoryLoaded: true, // 只有数据库分页全部读完并核对扫描范围后才能为 true
+  scanTruncated: false,
+});
+if (!corpus.complete) {
+  // 不能据此说“我记得你以前说过……”；改用不确定的、可让用户纠正的表达。
+}
+// corpus.texts 仅给宿主的本地校验器使用，绝不放进模型上下文或分享卡。
+```
+
+`currentTurnSourceIds` 必须包含已持久化的本轮消息，否则当前的话会被误当成历史回忆。函数按当前 owner、撤回、删除水位、时间和角色过滤，并在同一 owner 出现重复 source ID 时保守失败；校验语料按真实时间由新到旧排序。默认最多读取 200 万 UTF-16 字符，可降低上限但不能提高硬上限。分页不完整、扫描截断、无效边界、身份冲突或超限时返回 `complete: false` 且 `texts: []`。`fullHistoryLoaded` 是宿主声明，模块无法自行证明数据库已经读全；也无法判断哪一句“更正”推翻哪一句旧话。最终的强主张检查、可修正的观察和专业边界仍由宿主负责。
+
 ### 服务端 CJS 的可信边界
 
 服务端可对客户端提交的 source / quote 调用 `verifyEvidence`，核对字段、原文切片、UTF-16 位置、来源 ID、session、时间精度，以及**本次提供的**边界。它不能证明客户端真的保存过这段聊天、请求者拥有这些记录、时间真实或水位未被篡改。客户端同时伪造原文和相符 quote 仍可通过校验，不得称为数据库认证。
@@ -221,7 +242,7 @@ const adapted = HEM.adaptSessions(legacySessions, { ...boundary, mapping });
 
 删除水位只接受带时区完整 ISO 或 UTC 日期；省略或 null 表示无水位，空字符串和其他非法值会排除受影响的来源。同一 owner 的重复 ID 在有效性过滤前全部排除，避免撤回副本与旧活跃副本冲突时旧资料复活。适配诊断与检索 coverage 分开：coverage 只描述传给检索器的 sources，不能证明宿主已加载所有 session。
 
-0.1.x 的 evidence 函数名、参数与字段保留；旧 `MemorySource` 可省略精度字段。0.2.0 收紧了空水位、无效 now、非法状态和撤回副本冲突的处理。宿主应显式传合法时间 / null，而不是依赖宽松的 Date.parse 行为。
+0.1.x 的 evidence 函数名、参数与字段保留；旧 `MemorySource` 可省略精度字段。0.2.0 收紧了空水位、无效 now、非法状态和撤回副本冲突的处理。0.3.0 新增强记忆主张的完整历史校验语料 API，没有改变旧检索 API。宿主应显式传合法时间 / null，而不是依赖宽松的 Date.parse 行为。
 
 ## 调用方必须负责的部分
 

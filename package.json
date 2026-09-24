@@ -1,6 +1,6 @@
 {
   "name": "here-evidence-memory",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Evidence-first, source-verifiable lexical memory retrieval for long-running conversations.",
   "type": "module",
   "main": "./dist/index.cjs",
