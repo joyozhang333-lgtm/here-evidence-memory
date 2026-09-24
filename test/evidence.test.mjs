@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   EVIDENCE_MEMORY_VERSION,
+  collectClaimVerificationCorpus,
   formatEvidenceContext,
   isSourceEligible,
   retrieveEvidence,
@@ -18,12 +19,76 @@ const source = (id, text, age = 1, extra = {}) => ({
 });
 
 test("exports a version and source-verifiable evidence", () => {
-  assert.equal(EVIDENCE_MEMORY_VERSION, "0.2.0");
+  assert.equal(EVIDENCE_MEMORY_VERSION, "0.3.0");
   const original = source("one", "我希望练习工作边界，不再一味答应。", 30);
   const result = retrieveEvidence([original], options());
   assert.equal(result.evidence.length, 1);
   assert.equal(verifyEvidence(result.evidence[0], original, options()), true);
   assert.equal(result.evidence[0].ageDays, 30);
+});
+
+test("strong recall verification sees later corrections that bounded retrieval omits", () => {
+  const decision = source("decision", "我决定离开这份工作。", 30);
+  const correction = source("correction", "我前面说决定离职是玩笑，还没有做决定。", 29);
+  const filler = Array.from({ length: 50 }, (_, index) =>
+    source(`ordinary-${index}`, `普通聊天第 ${index} 条。`, 1));
+  const history = [decision, correction, ...filler];
+  const selected = retrieveEvidence(history, options({ query: "记得我决定离开这份工作吗？", maxItems: 1 }));
+  assert.ok(selected.evidence.some(item => item.sourceId === decision.id));
+  assert.ok(!selected.evidence.some(item => item.sourceId === correction.id));
+  const corpus = collectClaimVerificationCorpus(history, {
+    ownerId: "synthetic-a", now: NOW, currentTurnSourceIds: [], fullHistoryLoaded: true,
+  });
+  assert.equal(corpus.complete, true);
+  assert.equal(corpus.reason, "complete");
+  assert.ok(corpus.texts.includes(decision.text));
+  assert.ok(corpus.texts.includes(correction.text));
+  assert.equal(selected.evidence.length, 1);
+  assert.equal(formatEvidenceContext(selected).includes(correction.text), false);
+});
+
+test("a persisted active turn cannot masquerade as an older memory", () => {
+  const old = source("old", "我还在考虑。", 30);
+  const current = source("current", "我决定离开这份工作。", 0);
+  const corpus = collectClaimVerificationCorpus([old, current], {
+    ownerId: "synthetic-a", now: NOW, currentTurnSourceIds: [current.id], fullHistoryLoaded: true,
+  });
+  assert.deepEqual(corpus.texts, [old.text]);
+  assert.equal(corpus.consideredCount, 1);
+  assert.equal(corpus.complete, true);
+});
+
+test("full-text claim verification fails closed for incomplete, conflicting or oversized history", () => {
+  const old = source("old", "我还在考虑。", 30);
+  const base = { ownerId: "synthetic-a", now: NOW, currentTurnSourceIds: [], fullHistoryLoaded: true };
+  for (const extra of [
+    { fullHistoryLoaded: false }, { scanTruncated: true },
+    { maxCharacters: 1 }, { excludedBefore: "invalid" },
+    { memoryEnabled: false },
+  ]) {
+    const corpus = collectClaimVerificationCorpus([old], { ...base, ...extra });
+    assert.equal(corpus.complete, false);
+    assert.deepEqual(corpus.texts, []);
+  }
+  const conflict = collectClaimVerificationCorpus([old, { ...old, status: "revoked" }], base);
+  assert.equal(conflict.reason, "identity-conflict");
+  assert.deepEqual(conflict.texts, []);
+});
+
+test("claim verification uses current consent and actual offset time ordering", () => {
+  const earlier = source("earlier", "早先的说法。", 1, { observedAt: "2026-01-01T01:00:00+02:00" });
+  const later = source("later", "后来的更正。", 1, { observedAt: "2026-01-01T00:30:00Z" });
+  const other = source("other", "另一个用户的话。", 1, { ownerId: "synthetic-b" });
+  const assistant = source("assistant", "助手的话。", 1, { role: "assistant" });
+  const corpus = collectClaimVerificationCorpus([earlier, later, other, assistant], {
+    ownerId: "synthetic-a", now: NOW, currentTurnSourceIds: [], fullHistoryLoaded: true,
+  });
+  assert.deepEqual(corpus.texts, [later.text, earlier.text]);
+  const excluded = collectClaimVerificationCorpus([earlier, later], {
+    ownerId: "synthetic-a", now: NOW, currentTurnSourceIds: [], fullHistoryLoaded: true,
+    excludedBefore: "2026-01-01T00:00:00Z",
+  });
+  assert.deepEqual(excluded.texts, [later.text]);
 });
 
 for (const count of [100, 300, 1_000]) {
